@@ -39,7 +39,8 @@ import java.util.Locale;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-public class MessagingActivity extends Activity {
+public class MessagingActivity extends Activity
+    implements ServiceConnection, MessageClientListener {
 
   private static final String TAG = MessagingActivity.class.getSimpleName();
   private String mRecipientId;
@@ -48,8 +49,6 @@ public class MessagingActivity extends Activity {
   private MessageAdapter mMessageAdapter;
   private String mRecipientName;
   private String mCurrentUserId;
-  private ServiceConnection mServiceConnection = new MyServiceConnection();
-  private MessageClientListener mMessageClientListener = new MyMessageClientListener();
   private SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd HH:mm", Locale.getDefault());
 
   @Override protected void onCreate(Bundle savedInstanceState) {
@@ -57,7 +56,8 @@ public class MessagingActivity extends Activity {
     setContentView(R.layout.messaging);
 
     //bind the messaging service
-    bindService(new Intent(this, MessageService.class), mServiceConnection, BIND_AUTO_CREATE);
+    Intent i = new Intent(this, MessageService.class);
+    bindService(i, this, BIND_AUTO_CREATE);
 
     //get mRecipientId from the intent
     Intent intent = getIntent();
@@ -126,88 +126,85 @@ public class MessagingActivity extends Activity {
   }
 
   @Override public void onDestroy() {
-    mMessageService.removeMessageClientListener(mMessageClientListener);
-    unbindService(mServiceConnection);
+    if (mMessageService != null) {
+      mMessageService.removeMessageClientListener(this);
+    }
+    unbindService(this);
     super.onDestroy();
   }
 
-  private class MyServiceConnection implements ServiceConnection {
-    @Override public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-      mMessageService = (MessageService.MessageServiceInterface) iBinder;
-      mMessageService.addMessageClientListener(mMessageClientListener);
-    }
-
-    @Override public void onServiceDisconnected(ComponentName componentName) {
-      mMessageService = null;
-    }
+  @Override public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+    mMessageService = (MessageService.MessageServiceInterface) iBinder;
+    mMessageService.addMessageClientListener(this);
   }
 
-  private class MyMessageClientListener implements MessageClientListener {
-    @Override public void onMessageFailed(MessageClient client, Message message,
-        MessageFailureInfo failureInfo) {
-      Toast.makeText(MessagingActivity.this, "Message failed to send.", Toast.LENGTH_LONG).show();
-    }
+  @Override public void onServiceDisconnected(ComponentName componentName) {
+    mMessageService = null;
+  }
 
-    @Override public void onIncomingMessage(MessageClient client, final Message message) {
-      if (message.getSenderId().equals(mRecipientId)) {
-        final WritableMessage writableMessage =
-            new WritableMessage(message.getRecipientIds().get(0), message.getTextBody());
-        writableMessage.addHeader(ParseConstants.DATE, dateFormat.format(new Date()));
-        mMessageAdapter.addMessage(writableMessage, MessageAdapter.DIRECTION_INCOMING,
-            mRecipientName);
-      }
-    }
+  @Override public void onMessageFailed(MessageClient client, Message message,
+      MessageFailureInfo failureInfo) {
+    Toast.makeText(MessagingActivity.this, "Message failed to send.", Toast.LENGTH_LONG).show();
+  }
 
-    @Override public void onMessageSent(MessageClient client, Message message, String recipientId) {
-
+  @Override public void onIncomingMessage(MessageClient client, final Message message) {
+    if (message.getSenderId().equals(mRecipientId)) {
       final WritableMessage writableMessage =
           new WritableMessage(message.getRecipientIds().get(0), message.getTextBody());
       writableMessage.addHeader(ParseConstants.DATE, dateFormat.format(new Date()));
+      mMessageAdapter.addMessage(writableMessage, MessageAdapter.DIRECTION_INCOMING,
+          mRecipientName);
+    }
+  }
 
-      //only add message to parse database if it doesn't already exist there
-      ParseQuery<ParseMessage> query = ParseQuery.getQuery(ParseConstants.CLASS_MESSAGE);
-      query.whereEqualTo(ParseConstants.MESSAGE_OBJECT_SINCH_ID_FIELD, message.getMessageId());
-      query.findInBackground(new FindCallback<ParseMessage>() {
-        @Override public void done(List<ParseMessage> messages, ParseException e) {
-          if (e == null) {
-            if (messages.size() == 0) {
-              ParseMessage parseMessage = new ParseMessage();
-              parseMessage.setSenderId(mCurrentUserId);
-              parseMessage.setRecipientId(mRecipientId);
-              parseMessage.setMessage(writableMessage.getTextBody());
-              parseMessage.setSinchId(writableMessage.getMessageId());
-              parseMessage.saveInBackground();
+  @Override public void onMessageSent(MessageClient client, Message message, String recipientId) {
 
-              mMessageAdapter.addMessage(writableMessage, MessageAdapter.DIRECTION_OUTGOING,
-                  mRecipientName);
-            }
+    final WritableMessage writableMessage =
+        new WritableMessage(message.getRecipientIds().get(0), message.getTextBody());
+    writableMessage.addHeader(ParseConstants.DATE, dateFormat.format(new Date()));
+
+    //only add message to parse database if it doesn't already exist there
+    ParseQuery<ParseMessage> query = ParseQuery.getQuery(ParseConstants.CLASS_MESSAGE);
+    query.whereEqualTo(ParseConstants.MESSAGE_OBJECT_SINCH_ID_FIELD, message.getMessageId());
+    query.findInBackground(new FindCallback<ParseMessage>() {
+      @Override public void done(List<ParseMessage> messages, ParseException e) {
+        if (e == null) {
+          if (messages.size() == 0) {
+            ParseMessage parseMessage = new ParseMessage();
+            parseMessage.setSenderId(mCurrentUserId);
+            parseMessage.setRecipientId(mRecipientId);
+            parseMessage.setMessage(writableMessage.getTextBody());
+            parseMessage.setSinchId(writableMessage.getMessageId());
+            parseMessage.saveInBackground();
+
+            mMessageAdapter.addMessage(writableMessage, MessageAdapter.DIRECTION_OUTGOING,
+                mRecipientName);
           }
         }
-      });
+      }
+    });
 
-      ParseQuery<ParseUser> userQuery = ParseUser.getQuery();
-      userQuery.getInBackground(mRecipientId, new GetCallback<ParseUser>() {
-        @Override public void done(ParseUser toUser, ParseException e) {
-          if (e == null) {
-            try {
-              sendPushNotification(toUser);
-            } catch (JSONException e1) {
-              e1.printStackTrace();
-            }
-          } else {
-            Log.e(TAG, e.getMessage());
+    ParseQuery<ParseUser> userQuery = ParseUser.getQuery();
+    userQuery.getInBackground(mRecipientId, new GetCallback<ParseUser>() {
+      @Override public void done(ParseUser toUser, ParseException e) {
+        if (e == null) {
+          try {
+            sendPushNotification(toUser);
+          } catch (JSONException e1) {
+            e1.printStackTrace();
           }
+        } else {
+          Log.e(TAG, e.getMessage());
         }
-      });
-    }
+      }
+    });
+  }
 
-    @Override
-    public void onMessageDelivered(MessageClient client, MessageDeliveryInfo deliveryInfo) {
-    }
+  @Override public void onMessageDelivered(MessageClient client, MessageDeliveryInfo deliveryInfo) {
+  }
 
-    @Override public void onShouldSendPushData(MessageClient client, Message message,
-        List<PushPair> pushPairs) {
-    }
+  @Override public void onShouldSendPushData(MessageClient client, Message message,
+      List<PushPair> pushPairs) {
   }
 
   private void sendPushNotification(final ParseUser toUser) throws JSONException {
