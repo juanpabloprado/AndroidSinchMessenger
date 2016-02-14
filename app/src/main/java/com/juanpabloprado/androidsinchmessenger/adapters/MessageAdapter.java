@@ -1,35 +1,35 @@
 package com.juanpabloprado.androidsinchmessenger.adapters;
 
 import android.content.Context;
-import android.support.v4.util.Pair;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.TextView;
 import com.juanpabloprado.androidsinchmessenger.R;
-import com.juanpabloprado.androidsinchmessenger.util.ParseConstants;
-import com.sinch.android.rtc.messaging.WritableMessage;
+import com.parse.ParseUser;
+import com.sinch.android.rtc.messaging.Message;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class MessageAdapter extends BaseAdapter {
 
   public static final int DIRECTION_INCOMING = 0;
   public static final int DIRECTION_OUTGOING = 1;
 
-  private List<Pair<WritableMessage, Integer>> messages;
+  private List<Message> messages;
   private Context mContext;
-  private String mName;
+  private SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd HH:mm", Locale.getDefault());
 
   public MessageAdapter(Context context) {
     this.mContext = context;
-    messages = new ArrayList<Pair<WritableMessage, Integer>>();
+    messages = new ArrayList<>();
   }
 
-  public void addMessage(WritableMessage message, int direction, String name) {
-    mName = name;
-    messages.add(new Pair<WritableMessage, Integer>(message, direction));
+  public void addMessage(Message message) {
+    messages.add(message);
     notifyDataSetChanged();
   }
 
@@ -50,7 +50,12 @@ public class MessageAdapter extends BaseAdapter {
   }
 
   @Override public int getItemViewType(int i) {
-    return messages.get(i).second;
+    String currentUserId = ParseUser.getCurrentUser().getObjectId();
+    if (messages.get(i).getSenderId().equals(currentUserId)) {
+      return DIRECTION_OUTGOING;
+    } else {
+      return DIRECTION_INCOMING;
+    }
   }
 
   @Override public View getView(int i, View convertView, ViewGroup viewGroup) {
@@ -80,13 +85,12 @@ public class MessageAdapter extends BaseAdapter {
     convertView.setEnabled(false);
     convertView.setOnClickListener(null);
 
-    WritableMessage message = messages.get(i).first;
+    Message message = messages.get(i);
+    String name = message.getSenderId();
 
-    holder.dateField.setText(message.getHeaders().get(ParseConstants.DATE));
+    holder.dateField.setText(dateFormat.format(message.getTimestamp()));
     holder.txtMessage.setText(message.getTextBody());
-    if (holder.nameField != null) {
-      holder.nameField.setText(mName);
-    }
+    holder.nameField.setText(name);
 
     return convertView;
   }
@@ -96,6 +100,5 @@ public class MessageAdapter extends BaseAdapter {
     TextView nameField;
     TextView dateField;
   }
-
 }
 

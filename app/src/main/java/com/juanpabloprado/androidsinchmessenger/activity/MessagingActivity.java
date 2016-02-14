@@ -30,12 +30,8 @@ import com.sinch.android.rtc.messaging.MessageClient;
 import com.sinch.android.rtc.messaging.MessageClientListener;
 import com.sinch.android.rtc.messaging.MessageDeliveryInfo;
 import com.sinch.android.rtc.messaging.MessageFailureInfo;
-import com.sinch.android.rtc.messaging.WritableMessage;
-import java.text.SimpleDateFormat;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -49,7 +45,6 @@ public class MessagingActivity extends Activity
   private MessageAdapter mMessageAdapter;
   private String mRecipientName;
   private String mCurrentUserId;
-  private SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd HH:mm", Locale.getDefault());
 
   @Override protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -94,21 +89,10 @@ public class MessagingActivity extends Activity
       @Override public void done(List<ParseMessage> messages, ParseException e) {
         if (e == null) {
 
-          for (int i = 0; i < messages.size(); i++) {
-            WritableMessage message =
-                new WritableMessage(messages.get(i).getRecipientId(), messages.get(i).getMessage());
-
-            message.addHeader(ParseConstants.DATE,
-                dateFormat.format(messages.get(i).getCreatedAt()));
-
-            if (messages.get(i).getSenderId().equals(mCurrentUserId)) {
-              mMessageAdapter.addMessage(message, MessageAdapter.DIRECTION_OUTGOING,
-                  mRecipientName);
-            } else {
-              mMessageAdapter.addMessage(message, MessageAdapter.DIRECTION_INCOMING,
-                  mRecipientName);
-            }
+          for (ParseMessage message : messages) {
+            mMessageAdapter.addMessage(message);
           }
+
         }
       }
     });
@@ -149,19 +133,11 @@ public class MessagingActivity extends Activity
 
   @Override public void onIncomingMessage(MessageClient client, final Message message) {
     if (message.getSenderId().equals(mRecipientId)) {
-      final WritableMessage writableMessage =
-          new WritableMessage(message.getRecipientIds().get(0), message.getTextBody());
-      writableMessage.addHeader(ParseConstants.DATE, dateFormat.format(new Date()));
-      mMessageAdapter.addMessage(writableMessage, MessageAdapter.DIRECTION_INCOMING,
-          mRecipientName);
+      mMessageAdapter.addMessage(message);
     }
   }
 
-  @Override public void onMessageSent(MessageClient client, Message message, String recipientId) {
-
-    final WritableMessage writableMessage =
-        new WritableMessage(message.getRecipientIds().get(0), message.getTextBody());
-    writableMessage.addHeader(ParseConstants.DATE, dateFormat.format(new Date()));
+  @Override public void onMessageSent(MessageClient client, final Message message, String recipientId) {
 
     //only add message to parse database if it doesn't already exist there
     ParseQuery<ParseMessage> query = ParseQuery.getQuery(ParseConstants.CLASS_MESSAGE);
@@ -173,12 +149,10 @@ public class MessagingActivity extends Activity
             ParseMessage parseMessage = new ParseMessage();
             parseMessage.setSenderId(mCurrentUserId);
             parseMessage.setRecipientId(mRecipientId);
-            parseMessage.setMessage(writableMessage.getTextBody());
-            parseMessage.setSinchId(writableMessage.getMessageId());
+            parseMessage.setMessage(message.getTextBody());
+            parseMessage.setSinchId(message.getMessageId());
             parseMessage.saveInBackground();
-
-            mMessageAdapter.addMessage(writableMessage, MessageAdapter.DIRECTION_OUTGOING,
-                mRecipientName);
+            mMessageAdapter.addMessage(parseMessage);
           }
         }
       }
