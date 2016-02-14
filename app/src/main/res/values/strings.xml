@@ -1,0 +1,16 @@
+<resources>
+
+  <string name="parse_app_id">app-id</string>
+  <string name="parse_client_key">client-key</string>
+
+  <string name="app_name">AndroidSinchMessenger</string>
+  <string name="login_activity_label">Sinch Android Messenger</string>
+  <string name="username">USERNAME</string>
+  <string name="password">PASSWORD</string>
+  <string name="title_activity_list_users">ListUsersActivity</string>
+  <string name="hello_world">Hello world!</string>
+  <string name="action_settings">Settings</string>
+  <string name="message_elipses">Message…</string>
+  <string name="logout">Logout</string>
+  <string name="push_message">You have a new message from %s!</string>
+</resources>
